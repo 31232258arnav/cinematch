@@ -11,14 +11,18 @@ Concepts covered:
   - Matplotlib & Seaborn plots
 """
 
+import os
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ─────────────────────────────────────────────
 # 1. LOAD DATA
 # ─────────────────────────────────────────────
-movies = pd.read_csv("movies.csv")
+base_dir = os.path.dirname(__file__)
+movies = pd.read_csv(os.path.join(base_dir, "movies.csv"))
 
 print("=" * 50)
 print("📋 DATASET OVERVIEW")
@@ -82,6 +86,6 @@ axes[1, 1].set_xlabel("Number of Votes")
 axes[1, 1].legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
 
 plt.tight_layout()
-plt.savefig("exploration.png", dpi=150, bbox_inches="tight")
-plt.show()
+plt.savefig(os.path.join(base_dir, "exploration.png"), dpi=150, bbox_inches="tight")
+print("Exploration dashboard saved to exploration.png")
 print("\n✅ Chart saved as exploration.png")

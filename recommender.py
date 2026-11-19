@@ -1,118 +1,107 @@
 """
 recommender.py
 --------------
-Step 2: Build a Movie Recommendation System
-        Uses Content-Based Filtering (Genre + Rating similarity)
-
-Concepts covered:
-  - TF-IDF Vectorizer (converts text → numbers)
-  - Cosine Similarity (measures how similar two movies are)
-  - pandas merge & filtering
-  - Simple recommendation function
+Step 2: Build an Advanced Movie Recommendation System
+        Uses Content-Based Filtering with Multi-Attribute TF-IDF Vectorization
+        (Genre + Director + Narrative Tropes + Overview + Cast)
 """
 
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import os
 
 # ─────────────────────────────────────────────
 # 1. LOAD DATA
 # ─────────────────────────────────────────────
-movies = pd.read_csv("movies.csv")
+csv_path = os.path.join(os.path.dirname(__file__), "movies.csv")
+movies = pd.read_csv(csv_path)
 
-print("=" * 55)
-print("🎬  MOVIE RECOMMENDATION SYSTEM  🎬")
-print("=" * 55)
+print("=" * 60)
+print("🎬  CINEMATCH AI RECOMMENDATION ENGINE (EXPANDED 70+ DB)  🎬")
+print("=" * 60)
 
 # ─────────────────────────────────────────────
-# 2. FEATURE ENGINEERING
+# 2. FEATURE ENGINEERING (MULTI-ATTRIBUTE SOUP)
 # ─────────────────────────────────────────────
-# Combine genre + language into a single "tags" column
-# This is what makes movies similar to each other!
-movies["tags"] = movies["genre"] + " " + movies["language"]
+def create_content_soup(row):
+    parts = [
+        str(row.get("genre", "")),
+        str(row.get("genre", "")),
+        str(row.get("language", "")),
+        str(row.get("director", "")),
+        str(row.get("tropes", "")),
+        str(row.get("tropes", "")),
+        str(row.get("stars", "")),
+        str(row.get("overview", ""))
+    ]
+    return " ".join(parts)
 
-print("\n📌 Sample tags created:")
-print(movies[["title", "genre", "language", "tags"]].head(8).to_string(index=False))
+movies["tags"] = movies.apply(create_content_soup, axis=1)
+
+print("\n📌 Sample content soup created:")
+for _, r in movies[["title", "genre", "director"]].head(5).iterrows():
+    print(f"  • {r['title']} | {r['genre']} | Dir: {r['director']}")
 
 # ─────────────────────────────────────────────
 # 3. TF-IDF VECTORIZATION
 # ─────────────────────────────────────────────
-# TF-IDF converts text tags into numerical vectors
-# Each movie becomes a vector of numbers
-tfidf = TfidfVectorizer()
+tfidf = TfidfVectorizer(stop_words="english")
 tfidf_matrix = tfidf.fit_transform(movies["tags"])
 
 print(f"\n🔢 TF-IDF Matrix Shape: {tfidf_matrix.shape}")
-print("   (Each row = 1 movie, Each column = 1 unique word)")
+print(f"   ({tfidf_matrix.shape[0]} movies × {tfidf_matrix.shape[1]} unique vocabulary features)")
 
 # ─────────────────────────────────────────────
 # 4. COSINE SIMILARITY
 # ─────────────────────────────────────────────
-# Measures angle between two movie vectors
-# Score closer to 1.0 = More similar!
 similarity_matrix = cosine_similarity(tfidf_matrix)
-print(f"\n📐 Similarity Matrix Shape: {similarity_matrix.shape}")
-print("   (30×30 table: similarity score between every pair of movies)")
+print(f"📐 Similarity Matrix: {similarity_matrix.shape[0]}×{similarity_matrix.shape[1]} symmetric distance table")
 
 # ─────────────────────────────────────────────
 # 5. RECOMMENDATION FUNCTION
 # ─────────────────────────────────────────────
-def recommend_movies(movie_title, top_n=5):
+def recommend_movies(movie_title, top_n=5, dealbreaker=None):
     """
-    Given a movie title, return top N similar movies.
+    Given a movie title, returns the top N similar movies.
+    Supports negative constraint dealbreaker filtering.
     """
-    # Find the movie's index in our DataFrame
     movie_title = movie_title.strip()
     matches = movies[movies["title"].str.lower() == movie_title.lower()]
     
     if matches.empty:
         print(f"\n❌ Movie '{movie_title}' not found!")
-        print("   Available movies:", list(movies["title"]))
-        return
+        return []
     
     movie_idx = matches.index[0]
-    
-    # Get similarity scores for this movie vs all others
     similarity_scores = list(enumerate(similarity_matrix[movie_idx]))
-    
-    # Sort by similarity score (descending), skip the movie itself (idx 0)
     similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
-    similarity_scores = similarity_scores[1:top_n + 1]  # skip index 0 (itself)
     
-    # Get movie details
-    recommended_indices = [i[0] for i in similarity_scores]
-    recommended_scores  = [round(i[1], 3) for i in similarity_scores]
-    
-    result = movies.iloc[recommended_indices][["title", "genre", "language", "rating"]].copy()
-    result["similarity"] = recommended_scores
-    
-    print(f"\n🎯 Because you liked: '{movies.iloc[movie_idx]['title']}'")
-    print(f"   Genre: {movies.iloc[movie_idx]['genre']} | Rating: {movies.iloc[movie_idx]['rating']}")
-    print(f"\n✨ Top {top_n} Recommendations:\n")
-    print(result.to_string(index=False))
-    print()
-    return result
+    results = []
+    for idx, score in similarity_scores[1:]:
+        cand = movies.iloc[idx]
+        if dealbreaker:
+            dbs = str(cand.get("dealbreakers", "")).lower()
+            if dealbreaker.lower() in dbs:
+                continue
+        results.append({
+            "title": cand["title"],
+            "genre": cand["genre"],
+            "director": cand.get("director", "N/A"),
+            "rating": cand["rating"],
+            "similarity": round(score * 100, 1),
+            "ott_india": cand.get("ott_india", "N/A")
+        })
+        if len(results) >= top_n:
+            break
+            
+    print(f"\n🎯 Top recommendations for '{movie_title}':")
+    for i, r in enumerate(results, 1):
+        print(f"  {i}. {r['title']} ({r['rating']}★) — {r['similarity']}% Match | {r['genre']} | Stream: {r['ott_india']}")
+    return results
 
-# ─────────────────────────────────────────────
-# 6. TRY IT OUT!
-# ─────────────────────────────────────────────
-recommend_movies("Inception")
-recommend_movies("3 Idiots")
-recommend_movies("Avengers: Endgame")
-recommend_movies("Coco")
-
-# ─────────────────────────────────────────────
-# 7. INTERACTIVE MODE
-# ─────────────────────────────────────────────
-print("\n" + "=" * 55)
-print("🕹️  INTERACTIVE MODE — Enter a movie to get recs!")
-print("=" * 55)
-print("Available movies:", list(movies["title"]))
-
-while True:
-    user_input = input("\n🎬 Enter a movie name (or 'quit' to exit): ").strip()
-    if user_input.lower() in ["quit", "exit", "q"]:
-        print("👋 Goodbye!")
-        break
-    recommend_movies(user_input)
+if __name__ == "__main__":
+    recommend_movies("Inception", top_n=5)
+    recommend_movies("Tumbbad", top_n=5)
+    recommend_movies("3 Idiots", top_n=5)
